@@ -73,7 +73,7 @@ async def notify_hospital(data: dict):
 # Main emergency endpoint
 # =====================
 
-@router.post("/api/v1/emergency/create")
+@router.post("/emergency/create")
 async def create_emergency(
     request: EmergencyRequest,
     background_tasks: BackgroundTasks
