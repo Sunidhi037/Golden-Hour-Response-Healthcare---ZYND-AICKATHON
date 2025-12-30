@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 # Import orchestrator ONLY
@@ -38,13 +38,12 @@ class EmergencyRequest(BaseModel):
     contact_email: str
 
 # =====================
-# Frontend endpoints
+# Frontend / quick endpoints
 # =====================
 
 @router.post("/triage")
 async def triage_emergency(request: TriageRequest):
     """Quick triage endpoint for frontend form submission"""
-    # You can implement this or keep legacy triage logic
     return {"message": "Triage endpoint active"}
 
 @router.get("/status/{emergency_id}")
