@@ -6,6 +6,7 @@ export default function EmergencyForm({ onEmergencyCreated }) {
   const [formData, setFormData] = useState({
     patientName: '',
     age: '',
+    gender: '',
     bloodPressure: '',
     heartRate: '',
     oxygenLevel: '',
@@ -31,7 +32,8 @@ export default function EmergencyForm({ onEmergencyCreated }) {
     
     const emergencyData = {
       patientName: formData.patientName,
-      age: formData.age ? parseInt(formData.age) : null,
+      age: formData.age,
+      gender: formData.gender,
       vitals: {
         bloodPressure: formData.bloodPressure,
         heartRate: formData.heartRate ? parseInt(formData.heartRate) : null,
@@ -53,6 +55,7 @@ export default function EmergencyForm({ onEmergencyCreated }) {
         setFormData({
           patientName: '',
           age: '',
+          gender: '',
           bloodPressure: '',
           heartRate: '',
           oxygenLevel: '',
@@ -69,7 +72,8 @@ export default function EmergencyForm({ onEmergencyCreated }) {
   const fillTestData = () => {
     setFormData({
       patientName: 'Rajesh Kumar',
-      age: '45',
+      age: '40-45',
+      gender: 'Male',
       bloodPressure: '140/90',
       heartRate: '95',
       oxygenLevel: '92',
@@ -78,6 +82,36 @@ export default function EmergencyForm({ onEmergencyCreated }) {
       longitude: '77.1025'
     });
   };
+
+
+  // Age range options
+  const ageRanges = [
+    '0-5',
+    '5-10',
+    '10-15',
+    '15-20',
+    '20-25',
+    '25-30',
+    '30-35',
+    '35-40',
+    '40-45',
+    '45-50',
+    '50-55',
+    '55-60',
+    '60-65',
+    '65-70',
+    '70-75',
+    '75-80',
+    '80-85',
+    '85-90',
+    '90-95',
+    '95-100',
+    '100+'
+  ];
+
+
+  // Gender options
+  const genderOptions = ['Male', 'Female', 'Others'];
 
 
   return (
@@ -108,18 +142,41 @@ export default function EmergencyForm({ onEmergencyCreated }) {
           </div>
 
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Age</label>
-            <input
-              type="number"
-              name="age"
-              value={formData.age}
-              onChange={handleChange}
-              style={styles.input}
-              placeholder="Enter age"
-              min="0"
-              max="120"
-            />
+          <div style={styles.row}>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Age</label>
+              <select
+                name="age"
+                value={formData.age}
+                onChange={handleChange}
+                style={styles.select}
+              >
+                <option value="">Select age range</option>
+                {ageRanges.map((range) => (
+                  <option key={range} value={range}>
+                    {range} years
+                  </option>
+                ))}
+              </select>
+            </div>
+
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Gender</label>
+              <select
+                name="gender"
+                value={formData.gender}
+                onChange={handleChange}
+                style={styles.select}
+              >
+                <option value="">Select gender</option>
+                {genderOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -317,6 +374,15 @@ const styles = {
     backgroundColor: '#333',
     color: 'white',
     fontSize: '14px'
+  },
+  select: {
+    padding: '10px',
+    borderRadius: '5px',
+    border: '1px solid #444',
+    backgroundColor: '#333',
+    color: 'white',
+    fontSize: '14px',
+    cursor: 'pointer'
   },
   textarea: {
     padding: '10px',
