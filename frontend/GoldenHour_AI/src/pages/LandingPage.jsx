@@ -15,13 +15,22 @@ export default function LandingPage({ onEmergency }) {
   };
 
   const getContentPadding = () => {
-    if (isMobile) return '0';  // NO padding on mobile
-    return '0 40px';  // Padding on larger screens
+    if (isMobile) return '0';
+    return '0 40px';
   };
 
   const getContainerPadding = () => {
-    if (isMobile) return '20px 0';  // Only top/bottom padding on mobile
+    if (isMobile) return '20px 0';
     return '20px';
+  };
+
+  const handleEmergencyClick = () => {
+    console.log('🚨 Emergency button clicked!');
+    if (onEmergency && typeof onEmergency === 'function') {
+      onEmergency();
+    } else {
+      console.error('❌ onEmergency is not a function:', onEmergency);
+    }
   };
 
   return (
@@ -40,18 +49,28 @@ export default function LandingPage({ onEmergency }) {
           <Logo size={isMobile ? 'medium' : 'large'} />
         </div>
 
-        {/* Emergency Button */}
+        {/* Emergency Button - FIXED */}
         <button 
           style={{
             ...styles.emergencyButton,
             width: '100%',
             fontSize: isMobile ? '24px' : '28px',
             padding: isMobile ? '18px 40px' : '20px 60px',
-            borderRadius: isMobile ? '0' : '50px'  // Sharp corners on mobile
+            borderRadius: isMobile ? '0' : '50px'
           }}
-          onClick={onEmergency}
-          onMouseEnter={(e) => !isMobile && (e.target.style.transform = 'scale(1.05)')}
-          onMouseLeave={(e) => !isMobile && (e.target.style.transform = 'scale(1)')}
+          onClick={handleEmergencyClick}
+          onMouseEnter={(e) => {
+            if (!isMobile) {
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.boxShadow = '0 15px 50px rgba(255, 0, 0, 0.7)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isMobile) {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 10px 40px rgba(255, 0, 0, 0.5)';
+            }
+          }}
         >
           🚨 EMERGENCY
         </button>
@@ -67,18 +86,36 @@ export default function LandingPage({ onEmergency }) {
             flexDirection: isMobile ? 'column' : 'row',
             width: '100%'
           }}>
-            <button style={{
-              ...styles.signInButton,
-              width: '100%',
-              minWidth: isMobile ? '100%' : '180px'
-            }}>
+            <button 
+              style={{
+                ...styles.signInButton,
+                width: '100%',
+                minWidth: isMobile ? '100%' : '180px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#667eea';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#667eea';
+              }}
+            >
               Sign In
             </button>
-            <button style={{
-              ...styles.signUpButton,
-              width: '100%',
-              minWidth: isMobile ? '100%' : '180px'
-            }}>
+            <button 
+              style={{
+                ...styles.signUpButton,
+                width: '100%',
+                minWidth: isMobile ? '100%' : '180px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#764ba2';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#667eea';
+              }}
+            >
               Sign Up
             </button>
           </div>
@@ -89,7 +126,14 @@ export default function LandingPage({ onEmergency }) {
           ...styles.hospitalSection,
           margin: isMobile ? '30px 20px 0 20px' : '30px 0 0 0'
         }}>
-          <a href="/hospital-register" style={styles.hospitalLink}>
+          <a 
+            href="#" 
+            style={styles.hospitalLink}
+            onClick={(e) => {
+              e.preventDefault();
+              alert('Hospital registration coming soon!');
+            }}
+          >
             🏥 Hospital Registration
           </a>
           <p style={styles.hospitalSubtext}>
@@ -123,7 +167,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '40px'
+    gap: '40px',
+    zIndex: 1
   },
   logoSection: {
     marginBottom: '20px',
@@ -138,7 +183,8 @@ const styles = {
     boxShadow: '0 10px 40px rgba(255, 0, 0, 0.5)',
     transition: 'all 0.3s ease',
     textTransform: 'uppercase',
-    letterSpacing: '2px'
+    letterSpacing: '2px',
+    outline: 'none'
   },
   authSection: {
     width: '100%',
@@ -168,7 +214,8 @@ const styles = {
     border: '2px solid #667eea',
     borderRadius: '25px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    outline: 'none'
   },
   signUpButton: {
     backgroundColor: '#667eea',
@@ -179,7 +226,8 @@ const styles = {
     border: '2px solid #667eea',
     borderRadius: '25px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    outline: 'none'
   },
   hospitalSection: {
     width: '100%',
@@ -196,7 +244,8 @@ const styles = {
     textDecoration: 'none',
     display: 'block',
     marginBottom: '10px',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    cursor: 'pointer'
   },
   hospitalSubtext: {
     color: '#888',
@@ -206,7 +255,8 @@ const styles = {
   footer: {
     position: 'absolute',
     bottom: '20px',
-    textAlign: 'center'
+    textAlign: 'center',
+    zIndex: 1
   },
   footerText: {
     color: '#666',

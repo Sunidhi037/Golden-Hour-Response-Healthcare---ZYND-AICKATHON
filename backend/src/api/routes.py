@@ -53,19 +53,22 @@ async def triage_emergency(
         
         print(f"✅ Emergency saved with ID: {emergency.id}")
         
-        # Trigger orchestrator in background
+        # Prepare payload for orchestrator
+        payload = {
+            "patientName": request.patientName,
+            "age": request.age,
+            "gender": request.gender,
+            "contact": request.contact,
+            "symptoms": request.symptoms,
+            "vitals": request.vitals.dict(),
+            "location": {"lat": request.location.lat, "lng": request.location.lng}
+        }
+        
+        # Trigger orchestrator in background - FIXED: pass as positional args
         background_tasks.add_task(
             orchestrator.handle_emergency,
-            emergency_id=emergency.id,
-            payload={
-                "patientName": request.patientName,
-                "age": request.age,
-                "gender": request.gender,
-                "contact": request.contact,
-                "symptoms": request.symptoms,
-                "vitals": request.vitals.dict(),
-                "location": {"lat": request.location.lat, "lng": request.location.lng}
-            }
+            emergency.id,  # First positional argument
+            payload        # Second positional argument
         )
         
         return {
@@ -80,6 +83,53 @@ async def triage_emergency(
         import traceback
         traceback.print_exc()
         db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================
+# Hospital Endpoint (NEW - fixes 404 error)
+# =====================
+
+@router.get("/hospitals/{emergency_id}")
+async def get_hospital_for_emergency(
+    emergency_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get assigned hospital for an emergency
+    """
+    try:
+        # Fetch emergency from database
+        emergency = db.query(Emergency).filter(Emergency.id == emergency_id).first()
+        
+        if not emergency:
+            raise HTTPException(status_code=404, detail="Emergency not found")
+        
+        if not emergency.assigned_hospital_id:
+            return {
+                "status": "pending", 
+                "message": "Hospital assignment in progress",
+                "emergencyId": emergency_id
+            }
+        
+        # TODO: Fetch hospital details from your Hospital table
+        # For now, return mock data
+        return {
+            "emergencyId": emergency_id,
+            "status": "assigned",
+            "hospital": {
+                "id": emergency.assigned_hospital_id,
+                "name": "City General Hospital",  # Replace with actual query
+                "address": "123 Main St",
+                "phone": "+91-1234567890",
+                "estimatedArrivalTime": emergency.estimated_arrival_time
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching hospital: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
