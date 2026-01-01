@@ -4,10 +4,12 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import SplashScreen from './components/SplashScreen';
 import LandingPage from './pages/LandingPage';
 import EmergencyForm from './components/EmergencyForm';
+import AmbulanceSelector from './components/AmbulanceSelector';
 import TriageResults from './components/TriageResults';
 import AgentStatus from './components/AgentStatus';
 import HospitalList from './components/HospitalList';
 import AmbulanceMap from './components/AmbulanceMap';
+import { useAmbulanceTracking, useSelectedHospital } from './hooks/useAmbulanceTracking.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,8 +26,25 @@ function Dashboard() {
   const [showLanding, setShowLanding] = useState(true);
   const [emergencyId, setEmergencyId] = useState(null);
   const [triageData, setTriageData] = useState(null);
+  const [needsAmbulance, setNeedsAmbulance] = useState(null);
+  const [selectedHospitalData, setSelectedHospitalData] = useState(null);
 
-  // Set body background to dark on mount
+  // Fetch real-time data
+  const { data: ambulanceData } = useAmbulanceTracking(emergencyId);
+  const { data: hospitalData } = useSelectedHospital(emergencyId);
+
+  // DEBUG: Log all states
+  useEffect(() => {
+    console.log('=== STATE DEBUG ===');
+    console.log('emergencyId:', emergencyId);
+    console.log('triageData:', triageData);
+    console.log('needsAmbulance:', needsAmbulance);
+    console.log('selectedHospitalData:', selectedHospitalData);
+    console.log('ambulanceData:', ambulanceData);
+    console.log('hospitalData:', hospitalData);
+    console.log('==================');
+  }, [emergencyId, triageData, needsAmbulance, selectedHospitalData, ambulanceData, hospitalData]);
+
   useEffect(() => {
     document.body.style.backgroundColor = '#0f0f0f';
     document.body.style.margin = '0';
@@ -41,6 +60,22 @@ function Dashboard() {
   const handleEmergencyCreated = (id, data) => {
     setEmergencyId(id);
     setTriageData(data);
+    console.log('✅ Emergency created:', id, data);
+  };
+
+  const handleAmbulanceSelection = (needs) => {
+    setNeedsAmbulance(needs);
+    console.log('✅ Ambulance selection:', needs);
+  };
+
+  const handleHospitalSelection = (hospital) => {
+    setSelectedHospitalData(hospital);
+    console.log('✅ Hospital selected:', hospital);
+  };
+
+  const handleAmbulanceArrival = () => {
+    console.log('🚑 Ambulance has arrived at emergency location!');
+    alert('🚑 Ambulance has arrived at the emergency location!');
   };
 
   const handleEmergencyClick = () => {
@@ -51,22 +86,33 @@ function Dashboard() {
     setShowSplash(false);
   };
 
-  // Show splash screen for 2 seconds on first load
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
-  // Show landing page until user clicks emergency
   if (showLanding) {
     return <LandingPage onEmergency={handleEmergencyClick} />;
   }
 
-  // Show main emergency dashboard
+  // Check if map should show
+  const shouldShowMap = emergencyId && 
+                        triageData && 
+                        needsAmbulance !== null && 
+                        selectedHospitalData && 
+                        ambulanceData;
+
+  console.log('Should show map?', shouldShowMap);
+
   return (
     <div style={styles.dashboard}>
-      {/* Back to Home button */}
       <button 
-        onClick={() => setShowLanding(true)}
+        onClick={() => {
+          setShowLanding(true);
+          setEmergencyId(null);
+          setTriageData(null);
+          setNeedsAmbulance(null);
+          setSelectedHospitalData(null);
+        }}
         style={styles.backButton}
       >
         ← Back to Home
@@ -77,22 +123,75 @@ function Dashboard() {
         <p style={styles.subtitle}>AI-Powered Emergency Healthcare System</p>
       </header>
 
+      {/* Step 1: Emergency Form */}
       <EmergencyForm onEmergencyCreated={handleEmergencyCreated} />
       
-      {/* Show Ambulance Map when emergency is created */}
-      {emergencyId && triageData && (
-        <AmbulanceMap 
-          emergencyLocation={triageData.location}
-          hospitalLocation={{ lat: 28.7196, lng: 77.0369 }}
-          ambulanceStartLocation={{ lat: 28.7100, lng: 77.0700 }}
-        />
+      {/* Step 2: Ambulance Selector */}
+      {emergencyId && triageData && needsAmbulance === null && (
+        <div>
+          <p style={{color: 'yellow', textAlign: 'center'}}>🟡 Step 2: Choose ambulance</p>
+          <AmbulanceSelector onSelect={handleAmbulanceSelection} />
+        </div>
+      )}
+
+      {/* Step 3: Hospital List */}
+      {emergencyId && needsAmbulance !== null && !selectedHospitalData && (
+        <div>
+          <p style={{color: 'yellow', textAlign: 'center'}}>🟡 Step 3: Select hospital</p>
+          <HospitalList 
+            emergencyId={emergencyId} 
+            onHospitalSelect={handleHospitalSelection}
+          />
+        </div>
+      )}
+
+      {/* Step 4: Loading message while waiting for ambulance data */}
+      {emergencyId && needsAmbulance !== null && selectedHospitalData && !ambulanceData && (
+        <div style={{color: 'yellow', textAlign: 'center', padding: '20px', backgroundColor: '#333', borderRadius: '10px', margin: '20px 0'}}>
+          ⏳ Loading ambulance data...
+        </div>
+      )}
+
+      {/* Step 5: Map */}
+      {shouldShowMap ? (
+        <div>
+          <p style={{color: 'lime', textAlign: 'center'}}>✅ Step 4: Map is showing!</p>
+          <AmbulanceMap 
+            emergencyLocation={{ 
+              lat: triageData.location.lat, 
+              lng: triageData.location.lng 
+            }}
+            hospitalLocation={{ 
+              lat: selectedHospitalData.latitude, 
+              lng: selectedHospitalData.longitude,
+              name: selectedHospitalData.name
+            }}
+            ambulanceStartLocation={{ 
+              lat: ambulanceData.currentLat, 
+              lng: ambulanceData.currentLng 
+            }}
+            needsAmbulance={needsAmbulance}
+            onAmbulanceArrival={handleAmbulanceArrival}
+          />
+        </div>
+      ) : (
+        selectedHospitalData && (
+          <div style={{color: 'red', textAlign: 'center', padding: '20px', backgroundColor: '#331111', borderRadius: '10px', margin: '20px 0'}}>
+            ❌ Map not showing. Missing data:
+            <ul style={{listStyle: 'none', padding: 0}}>
+              <li>{emergencyId ? '✅' : '❌'} Emergency ID</li>
+              <li>{triageData ? '✅' : '❌'} Triage Data</li>
+              <li>{needsAmbulance !== null ? '✅' : '❌'} Ambulance Selection</li>
+              <li>{selectedHospitalData ? '✅' : '❌'} Hospital Selected</li>
+              <li>{ambulanceData ? '✅' : '❌'} Ambulance Data</li>
+            </ul>
+          </div>
+        )
       )}
       
       <TriageResults triageData={triageData} />
       
       <AgentStatus emergencyId={emergencyId} />
-      
-      <HospitalList emergencyId={emergencyId} />
     </div>
   );
 }

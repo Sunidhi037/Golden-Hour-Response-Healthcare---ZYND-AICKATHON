@@ -1,165 +1,231 @@
-import { useHospitals } from '../hooks';
-import { useNotifyHospital } from '../hooks';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useState, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-export default function HospitalList({ emergencyId }) {
-  const { data: hospitalsResponse, isLoading, error } = useHospitals(emergencyId);
-  const { mutate: notifyHospital, isPending: isNotifying } = useNotifyHospital();
+// Fix default marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
-  const handleNotify = (hospitalId) => {
-    notifyHospital({ hospitalId, emergencyId });
+// Custom icons
+const emergencyIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const hospitalIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const ambulanceIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+function AmbulanceTracker({ 
+  emergencyLocation, 
+  hospitalLocation, 
+  ambulanceStartLocation, 
+  needsAmbulance,
+  onAmbulanceArrival 
+}) {
+  const map = useMap();
+  const [currentPosition, setCurrentPosition] = useState(ambulanceStartLocation);
+  const [arrived, setArrived] = useState(false);
+  const animationRef = useRef(null);
+  const hasStartedRef = useRef(false);
+
+  useEffect(() => {
+    // Only run animation once
+    if (!needsAmbulance || hasStartedRef.current || arrived) return;
+
+    hasStartedRef.current = true;
+    console.log('🚑 Starting ambulance animation...');
+
+    const startLat = ambulanceStartLocation.lat;
+    const startLng = ambulanceStartLocation.lng;
+    const endLat = emergencyLocation.lat;
+    const endLng = emergencyLocation.lng;
+
+    const steps = 100;
+    let currentStep = 0;
+
+    animationRef.current = setInterval(() => {
+      currentStep++;
+      const progress = currentStep / steps;
+
+      const newLat = startLat + (endLat - startLat) * progress;
+      const newLng = startLng + (endLng - startLng) * progress;
+
+      setCurrentPosition({ lat: newLat, lng: newLng });
+      
+      // Only move map view every 10 steps to reduce jumpiness
+      if (currentStep % 10 === 0) {
+        map.setView([newLat, newLng], 13, { animate: true });
+      }
+
+      if (currentStep >= steps) {
+        console.log('🚑 Ambulance arrived!');
+        clearInterval(animationRef.current);
+        setArrived(true);
+        setCurrentPosition(emergencyLocation); // Ensure it stops exactly at emergency
+        if (onAmbulanceArrival) {
+          onAmbulanceArrival();
+        }
+      }
+    }, 100); // 100ms per step = 10 seconds total
+
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+      }
+    };
+  }, []); // Empty dependency array - only run once!
+
+  if (!needsAmbulance) return null;
+
+  return (
+    <Marker position={[currentPosition.lat, currentPosition.lng]} icon={ambulanceIcon}>
+      <Popup>
+        <strong>🚑 Ambulance</strong><br />
+        {arrived ? '✅ Arrived at Emergency!' : '🚦 En Route...'}
+      </Popup>
+    </Marker>
+  );
+}
+
+export default function AmbulanceMap({ 
+  emergencyLocation, 
+  hospitalLocation, 
+  ambulanceStartLocation, 
+  needsAmbulance,
+  onAmbulanceArrival 
+}) {
+  // Validate coordinates
+  const isValidCoord = (coord) => {
+    return coord && 
+           typeof coord.lat === 'number' && 
+           typeof coord.lng === 'number' &&
+           !isNaN(coord.lat) && 
+           !isNaN(coord.lng) &&
+           coord.lat !== 0 &&
+           coord.lng !== 0;
   };
 
-  if (!emergencyId) {
+  // Debug logs
+  console.log('=== AmbulanceMap Props ===');
+  console.log('emergencyLocation:', emergencyLocation);
+  console.log('hospitalLocation:', hospitalLocation);
+  console.log('ambulanceStartLocation:', ambulanceStartLocation);
+  console.log('needsAmbulance:', needsAmbulance);
+
+  // Validate all required coordinates
+  if (!isValidCoord(emergencyLocation)) {
     return (
-      <div style={styles.container}>
-        <p style={styles.placeholder}>Submit an emergency to see available hospitals</p>
+      <div style={styles.error}>
+        ❌ Error: Invalid emergency location coordinates
+        <pre>{JSON.stringify(emergencyLocation, null, 2)}</pre>
       </div>
     );
   }
 
-  if (isLoading) {
+  if (!isValidCoord(hospitalLocation)) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>
-          <div style={styles.spinner}></div>
-          <p>Finding nearest hospitals...</p>
-        </div>
+      <div style={styles.error}>
+        ❌ Error: Invalid hospital location coordinates
+        <pre>{JSON.stringify(hospitalLocation, null, 2)}</pre>
       </div>
     );
   }
 
-  if (error) {
+  if (needsAmbulance && !isValidCoord(ambulanceStartLocation)) {
     return (
-      <div style={styles.container}>
-        <div style={styles.error}>
-          ❌ Error loading hospitals: {error.message}
-        </div>
+      <div style={styles.error}>
+        ❌ Error: Invalid ambulance location coordinates
+        <pre>{JSON.stringify(ambulanceStartLocation, null, 2)}</pre>
       </div>
     );
   }
 
-  // FIXED: Safely extract hospitals array from different response formats
-  let hospitals = [];
-  
-  if (Array.isArray(hospitalsResponse)) {
-    // Response is already an array
-    hospitals = hospitalsResponse;
-  } else if (hospitalsResponse?.hospitals && Array.isArray(hospitalsResponse.hospitals)) {
-    // Response has a hospitals property
-    hospitals = hospitalsResponse.hospitals;
-  } else if (hospitalsResponse?.data && Array.isArray(hospitalsResponse.data)) {
-    // Response has a data property
-    hospitals = hospitalsResponse.data;
-  } else if (hospitalsResponse?.hospital) {
-    // Single hospital object
-    hospitals = [hospitalsResponse.hospital];
-  }
-
-  // Show empty state if no hospitals
-  if (!hospitals || hospitals.length === 0) {
-    return (
-      <div style={styles.container}>
-        <h2 style={styles.title}>🏥 Available Hospitals</h2>
-        <div style={styles.empty}>
-          <p>⏳ Searching for nearby hospitals...</p>
-          <p style={styles.emptySubtext}>This may take a few moments while AI agents process your request</p>
-        </div>
-      </div>
-    );
-  }
+  const center = [emergencyLocation.lat, emergencyLocation.lng];
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>🏥 Available Hospitals ({hospitals.length})</h2>
+      <h2 style={styles.title}>🗺️ Live Route Tracking</h2>
       
-      <div style={styles.list}>
-        {hospitals.map((hospital, index) => (
-          <div 
-            key={hospital.id || index} 
-            style={{
-              ...styles.card,
-              border: hospital.isRecommended ? '2px solid #4CAF50' : '1px solid #333'
-            }}
+      <div style={styles.mapWrapper}>
+        <MapContainer
+          center={center}
+          zoom={13}
+          style={styles.map}
+          scrollWheelZoom={true}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          
+          <Marker position={center} icon={emergencyIcon}>
+            <Popup>
+              <strong>🚨 Emergency Location</strong><br />
+              Patient needs immediate help
+            </Popup>
+          </Marker>
+          
+          <Marker 
+            position={[hospitalLocation.lat, hospitalLocation.lng]} 
+            icon={hospitalIcon}
           >
-            {hospital.isRecommended && (
-              <div style={styles.recommendedBadge}>⭐ RECOMMENDED</div>
-            )}
-            
-            <h3 style={styles.hospitalName}>
-              {hospital.name || `Hospital ${index + 1}`}
-            </h3>
-            
-            <div style={styles.infoGrid}>
-              <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>Distance:</span>
-                <span style={styles.infoValue}>
-                  {hospital.distance || 'N/A'} {hospital.distance ? 'km' : ''}
-                </span>
-              </div>
-              
-              <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>ETA:</span>
-                <span style={styles.infoValue}>
-                  {hospital.eta || hospital.estimatedArrivalTime || 'N/A'} 
-                  {hospital.eta ? ' min' : ''}
-                </span>
-              </div>
-              
-              <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>Beds Available:</span>
-                <span style={{
-                  ...styles.infoValue,
-                  color: (hospital.bedsAvailable || 0) > 5 ? '#4CAF50' : '#ff6600'
-                }}>
-                  {hospital.bedsAvailable !== undefined ? hospital.bedsAvailable : 'N/A'}
-                </span>
-              </div>
-            </div>
+            <Popup>
+              <strong>🏥 {hospitalLocation.name || 'Hospital'}</strong><br />
+              Selected destination
+            </Popup>
+          </Marker>
 
-            {/* Address */}
-            {hospital.address && (
-              <div style={styles.address}>
-                📍 {hospital.address}
-              </div>
-            )}
+          {needsAmbulance && ambulanceStartLocation && (
+            <AmbulanceTracker
+              emergencyLocation={emergencyLocation}
+              hospitalLocation={hospitalLocation}
+              ambulanceStartLocation={ambulanceStartLocation}
+              needsAmbulance={needsAmbulance}
+              onAmbulanceArrival={onAmbulanceArrival}
+            />
+          )}
+        </MapContainer>
+      </div>
 
-            {/* Phone */}
-            {hospital.phone && (
-              <div style={styles.phone}>
-                📞 {hospital.phone}
-              </div>
-            )}
-
-            {/* Specialties */}
-            {hospital.specialties && Array.isArray(hospital.specialties) && hospital.specialties.length > 0 && (
-              <div style={styles.specialties}>
-                <strong>Specialties:</strong> {hospital.specialties.join(', ')}
-              </div>
-            )}
-
-            <button
-              onClick={() => handleNotify(hospital.id || index)}
-              disabled={isNotifying}
-              style={{
-                ...styles.notifyButton,
-                opacity: isNotifying ? 0.6 : 1,
-                cursor: isNotifying ? 'not-allowed' : 'pointer'
-              }}
-              onMouseEnter={(e) => {
-                if (!isNotifying) {
-                  e.currentTarget.style.backgroundColor = '#1976D2';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isNotifying) {
-                  e.currentTarget.style.backgroundColor = '#2196F3';
-                }
-              }}
-            >
-              {isNotifying ? '📤 Notifying...' : '📢 Notify Hospital'}
-            </button>
+      <div style={styles.legend}>
+        <div style={styles.legendItem}>
+          <span style={{...styles.legendDot, backgroundColor: '#ff4444'}}>🔴</span>
+          <span>Emergency Location</span>
+        </div>
+        <div style={styles.legendItem}>
+          <span style={{...styles.legendDot, backgroundColor: '#4CAF50'}}>🟢</span>
+          <span>Hospital</span>
+        </div>
+        {needsAmbulance && (
+          <div style={styles.legendItem}>
+            <span style={{...styles.legendDot, backgroundColor: '#2196F3'}}>🔵</span>
+            <span>Ambulance (Moving)</span>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -170,133 +236,50 @@ const styles = {
     backgroundColor: '#1a1a1a',
     padding: '20px',
     borderRadius: '10px',
-    maxWidth: '1200px',
-    margin: '20px auto'
+    marginTop: '20px'
   },
   title: {
     color: '#4CAF50',
-    marginTop: 0,
-    marginBottom: '20px',
-    fontSize: '24px'
+    margin: '0 0 20px 0',
+    textAlign: 'center'
   },
-  placeholder: {
-    color: '#888',
-    textAlign: 'center',
-    padding: '40px',
-    fontSize: '16px'
+  mapWrapper: {
+    borderRadius: '10px',
+    overflow: 'hidden',
+    border: '2px solid #333'
   },
-  loading: {
+  map: {
+    height: '500px',
+    width: '100%'
+  },
+  legend: {
     display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '40px',
-    color: 'white'
+    justifyContent: 'center',
+    gap: '30px',
+    marginTop: '15px',
+    padding: '15px',
+    backgroundColor: '#2a2a2a',
+    borderRadius: '8px'
   },
-  spinner: {
-    border: '4px solid #333',
-    borderTop: '4px solid #4CAF50',
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    color: 'white',
+    fontSize: '14px'
+  },
+  legendDot: {
+    width: '12px',
+    height: '12px',
     borderRadius: '50%',
-    width: '40px',
-    height: '40px',
-    animation: 'spin 1s linear infinite',
-    marginBottom: '20px'
+    display: 'inline-block'
   },
   error: {
     backgroundColor: '#ff4444',
     color: 'white',
     padding: '20px',
-    borderRadius: '8px',
-    textAlign: 'center',
-    fontWeight: 'bold'
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '40px',
-    color: '#aaa'
-  },
-  emptySubtext: {
-    fontSize: '14px',
-    color: '#666',
-    marginTop: '10px'
-  },
-  list: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-    gap: '20px'
-  },
-  card: {
-    backgroundColor: '#2a2a2a',
-    padding: '20px',
     borderRadius: '10px',
-    position: 'relative',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-  },
-  recommendedBadge: {
-    backgroundColor: '#4CAF50',
-    color: 'white',
-    padding: '5px 10px',
-    borderRadius: '5px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    marginBottom: '10px',
-    display: 'inline-block'
-  },
-  hospitalName: {
-    color: 'white',
-    marginTop: '10px',
-    marginBottom: '15px',
-    fontSize: '20px'
-  },
-  infoGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '10px',
-    marginBottom: '15px'
-  },
-  infoItem: {
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  infoLabel: {
-    color: '#888',
-    fontSize: '12px',
-    marginBottom: '5px'
-  },
-  infoValue: {
-    color: 'white',
-    fontSize: '16px',
-    fontWeight: 'bold'
-  },
-  address: {
-    color: '#ccc',
-    fontSize: '14px',
-    marginBottom: '8px',
-    paddingTop: '10px',
-    borderTop: '1px solid #444'
-  },
-  phone: {
-    color: '#ccc',
-    fontSize: '14px',
-    marginBottom: '8px'
-  },
-  specialties: {
-    color: '#ccc',
-    fontSize: '14px',
-    marginBottom: '15px',
-    paddingTop: '10px',
-    borderTop: '1px solid #444'
-  },
-  notifyButton: {
-    width: '100%',
-    backgroundColor: '#2196F3',
-    color: 'white',
-    border: 'none',
-    padding: '12px',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    transition: 'background-color 0.3s ease',
-    marginTop: '10px'
+    marginTop: '20px',
+    fontFamily: 'monospace'
   }
 };

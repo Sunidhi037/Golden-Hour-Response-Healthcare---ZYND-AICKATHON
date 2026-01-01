@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-const API_BASE_URL = 'http://localhost:8000/api'; // Update with your backend URL
+const API_BASE_URL = 'http://localhost:8000/api';
 
 export function useAmbulanceTracking(emergencyId) {
   return useQuery({
@@ -14,9 +14,9 @@ export function useAmbulanceTracking(emergencyId) {
       }
       return response.json();
     },
-    enabled: !!emergencyId, // Only run query if emergencyId exists
-    refetchInterval: 5000, // Update every 5 seconds for real-time tracking
-    staleTime: 0, // Always fetch fresh data
+    enabled: !!emergencyId,
+    refetchInterval: 5000,
+    staleTime: 0,
   });
 }
 
@@ -32,7 +32,7 @@ export function useSelectedHospital(emergencyId) {
       }
       return response.json();
     },
-    enabled: !!emergencyId, // Only run query if emergencyId exists
-    staleTime: 30000, // Hospital data doesn't change as frequently
+    enabled: !!emergencyId,
+    staleTime: 30000,
   });
 }

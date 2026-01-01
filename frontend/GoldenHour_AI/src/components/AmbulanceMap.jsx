@@ -1,20 +1,19 @@
-import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Custom icon definitions
-const emergencyIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+// Fix default marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
 });
 
-const ambulanceIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+// Custom icons
+const emergencyIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -31,147 +30,187 @@ const hospitalIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-// Component to auto-fit bounds to show all markers
-function AutoFitBounds({ positions }) {
+const ambulanceIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+function AmbulanceTracker({ 
+  emergencyLocation, 
+  hospitalLocation, 
+  ambulanceStartLocation, 
+  needsAmbulance,
+  onAmbulanceArrival 
+}) {
   const map = useMap();
-  
-  useEffect(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions);
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [positions, map]);
-  
-  return null;
-}
-
-// Component to animate ambulance movement
-function MovingAmbulance({ start, end, speed = 0.001 }) {
-  const [position, setPosition] = useState(start);
-  const [progress, setProgress] = useState(0);
+  const [currentPosition, setCurrentPosition] = useState(ambulanceStartLocation);
+  const [arrived, setArrived] = useState(false);
 
   useEffect(() => {
+    if (!needsAmbulance) return;
+
+    const startLat = ambulanceStartLocation.lat;
+    const startLng = ambulanceStartLocation.lng;
+    const endLat = emergencyLocation.lat;
+    const endLng = emergencyLocation.lng;
+
+    const steps = 100;
+    let currentStep = 0;
+
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 1) return 0; // Reset when reached destination
-        return prev + speed;
-      });
+      currentStep++;
+      const progress = currentStep / steps;
+
+      const newLat = startLat + (endLat - startLat) * progress;
+      const newLng = startLng + (endLng - startLng) * progress;
+
+      setCurrentPosition({ lat: newLat, lng: newLng });
+      map.setView([newLat, newLng], 13);
+
+      if (currentStep >= steps) {
+        clearInterval(interval);
+        setArrived(true);
+        if (onAmbulanceArrival) {
+          onAmbulanceArrival();
+        }
+      }
     }, 100);
 
     return () => clearInterval(interval);
-  }, [speed]);
-
-  useEffect(() => {
-    // Interpolate position between start and end
-    const lat = start.lat + (end.lat - start.lat) * progress;
-    const lng = start.lng + (end.lng - start.lng) * progress;
-    setPosition({ lat, lng });
-  }, [progress, start, end]);
+  }, [ambulanceStartLocation, emergencyLocation, needsAmbulance, map, onAmbulanceArrival]);
 
   return (
-    <Marker position={position} icon={ambulanceIcon}>
-      <Popup>
-        🚑 Ambulance en route<br />
-        Progress: {Math.round(progress * 100)}%
-      </Popup>
-    </Marker>
+    <>
+      {needsAmbulance && currentPosition && (
+        <Marker position={[currentPosition.lat, currentPosition.lng]} icon={ambulanceIcon}>
+          <Popup>
+            🚑 Ambulance {arrived ? '(Arrived!)' : '(En Route)'}
+          </Popup>
+        </Marker>
+      )}
+    </>
   );
 }
 
 export default function AmbulanceMap({ 
   emergencyLocation, 
-  hospitalLocation,
-  ambulanceStartLocation 
+  hospitalLocation, 
+  ambulanceStartLocation, 
+  needsAmbulance,
+  onAmbulanceArrival 
 }) {
-  // Default locations if not provided
-  const emergency = emergencyLocation || { lat: 28.7041, lng: 77.1025 };
-  const hospital = hospitalLocation || { lat: 28.7196, lng: 77.0369 };
-  const ambulanceStart = ambulanceStartLocation || { lat: 28.7100, lng: 77.0700 };
+  // Validate coordinates
+  const isValidCoord = (coord) => {
+    return coord && 
+           typeof coord.lat === 'number' && 
+           typeof coord.lng === 'number' &&
+           !isNaN(coord.lat) && 
+           !isNaN(coord.lng) &&
+           coord.lat !== 0 &&
+           coord.lng !== 0;
+  };
 
-  // Route: Ambulance → Emergency → Hospital
-  const routePoints = [
-    [ambulanceStart.lat, ambulanceStart.lng],
-    [emergency.lat, emergency.lng],
-    [hospital.lat, hospital.lng]
-  ];
+  // Debug logs
+  console.log('=== AmbulanceMap Props ===');
+  console.log('emergencyLocation:', emergencyLocation);
+  console.log('hospitalLocation:', hospitalLocation);
+  console.log('ambulanceStartLocation:', ambulanceStartLocation);
+  console.log('needsAmbulance:', needsAmbulance);
 
-  // All positions for auto-fitting bounds
-  const allPositions = [
-    [ambulanceStart.lat, ambulanceStart.lng],
-    [emergency.lat, emergency.lng],
-    [hospital.lat, hospital.lng]
-  ];
+  // Validate all required coordinates
+  if (!isValidCoord(emergencyLocation)) {
+    return (
+      <div style={styles.error}>
+        ❌ Error: Invalid emergency location coordinates
+        <pre>{JSON.stringify(emergencyLocation, null, 2)}</pre>
+      </div>
+    );
+  }
+
+  if (!isValidCoord(hospitalLocation)) {
+    return (
+      <div style={styles.error}>
+        ❌ Error: Invalid hospital location coordinates
+        <pre>{JSON.stringify(hospitalLocation, null, 2)}</pre>
+      </div>
+    );
+  }
+
+  if (needsAmbulance && !isValidCoord(ambulanceStartLocation)) {
+    return (
+      <div style={styles.error}>
+        ❌ Error: Invalid ambulance location coordinates
+        <pre>{JSON.stringify(ambulanceStartLocation, null, 2)}</pre>
+      </div>
+    );
+  }
+
+  const center = [emergencyLocation.lat, emergencyLocation.lng];
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <h3 style={styles.title}>🚨 Live Ambulance Tracking</h3>
-        <div style={styles.legend}>
-          <span style={styles.legendItem}>🔴 Emergency</span>
-          <span style={styles.legendItem}>🔵 Ambulance</span>
-          <span style={styles.legendItem}>🟢 Hospital</span>
-        </div>
+      <h2 style={styles.title}>🗺️ Live Route Tracking</h2>
+      
+      <div style={styles.mapWrapper}>
+        <MapContainer
+          center={center}
+          zoom={13}
+          style={styles.map}
+          scrollWheelZoom={true}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          
+          <Marker position={center} icon={emergencyIcon}>
+            <Popup>
+              🚨 Emergency Location<br />
+              Patient location
+            </Popup>
+          </Marker>
+          
+          <Marker 
+            position={[hospitalLocation.lat, hospitalLocation.lng]} 
+            icon={hospitalIcon}
+          >
+            <Popup>
+              🏥 {hospitalLocation.name || 'Selected Hospital'}<br />
+              Destination
+            </Popup>
+          </Marker>
+
+          {needsAmbulance && ambulanceStartLocation && (
+            <AmbulanceTracker
+              emergencyLocation={emergencyLocation}
+              hospitalLocation={hospitalLocation}
+              ambulanceStartLocation={ambulanceStartLocation}
+              needsAmbulance={needsAmbulance}
+              onAmbulanceArrival={onAmbulanceArrival}
+            />
+          )}
+        </MapContainer>
       </div>
 
-      <MapContainer
-        center={[emergency.lat, emergency.lng]}
-        zoom={13}
-        style={{ height: '500px', width: '100%', borderRadius: '10px' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {/* Emergency Location - Red Marker */}
-        <Marker position={[emergency.lat, emergency.lng]} icon={emergencyIcon}>
-          <Popup>
-            <strong>🚨 Emergency Location</strong><br />
-            Patient needs immediate help
-          </Popup>
-        </Marker>
-
-        {/* Hospital Location - Green Marker */}
-        <Marker position={[hospital.lat, hospital.lng]} icon={hospitalIcon}>
-          <Popup>
-            <strong>🏥 Selected Hospital</strong><br />
-            Destination for patient
-          </Popup>
-        </Marker>
-
-        {/* Moving Ambulance - Blue Marker */}
-        <MovingAmbulance 
-          start={ambulanceStart} 
-          end={emergency}
-          speed={0.005}
-        />
-
-        {/* Route Line - Shows path */}
-        <Polyline 
-          positions={routePoints}
-          color="blue"
-          weight={4}
-          opacity={0.7}
-          dashArray="10, 10"
-        />
-
-        {/* Auto-fit all markers in view */}
-        <AutoFitBounds positions={allPositions} />
-      </MapContainer>
-
-      <div style={styles.info}>
-        <div style={styles.infoItem}>
-          <span style={styles.infoLabel}>Distance:</span>
-          <span style={styles.infoValue}>~5.2 km</span>
+      <div style={styles.legend}>
+        <div style={styles.legendItem}>
+          <span style={{...styles.legendDot, backgroundColor: '#ff4444'}}>🔴</span>
+          <span>Emergency Location</span>
         </div>
-        <div style={styles.infoItem}>
-          <span style={styles.infoLabel}>ETA:</span>
-          <span style={styles.infoValue}>~8 minutes</span>
+        <div style={styles.legendItem}>
+          <span style={{...styles.legendDot, backgroundColor: '#4CAF50'}}>🟢</span>
+          <span>Hospital</span>
         </div>
-        <div style={styles.infoItem}>
-          <span style={styles.infoLabel}>Status:</span>
-          <span style={styles.infoValue}>🚨 En Route</span>
-        </div>
+        {needsAmbulance && (
+          <div style={styles.legendItem}>
+            <span style={{...styles.legendDot, backgroundColor: '#2196F3'}}>🔵</span>
+            <span>Ambulance (Moving)</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -184,43 +223,48 @@ const styles = {
     borderRadius: '10px',
     marginTop: '20px'
   },
-  header: {
-    marginBottom: '15px'
-  },
   title: {
     color: '#4CAF50',
-    margin: '0 0 10px 0',
-    fontSize: '20px'
+    margin: '0 0 20px 0',
+    textAlign: 'center'
+  },
+  mapWrapper: {
+    borderRadius: '10px',
+    overflow: 'hidden',
+    border: '2px solid #333'
+  },
+  map: {
+    height: '500px',
+    width: '100%'
   },
   legend: {
     display: 'flex',
-    gap: '20px',
-    fontSize: '14px'
-  },
-  legendItem: {
-    color: '#ccc'
-  },
-  info: {
-    display: 'flex',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
+    gap: '30px',
     marginTop: '15px',
     padding: '15px',
     backgroundColor: '#2a2a2a',
     borderRadius: '8px'
   },
-  infoItem: {
+  legendItem: {
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
-    gap: '5px'
+    gap: '10px',
+    color: 'white',
+    fontSize: '14px'
   },
-  infoLabel: {
-    color: '#888',
-    fontSize: '12px'
+  legendDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    display: 'inline-block'
   },
-  infoValue: {
-    color: '#4CAF50',
-    fontSize: '16px',
-    fontWeight: 'bold'
+  error: {
+    backgroundColor: '#ff4444',
+    color: 'white',
+    padding: '20px',
+    borderRadius: '10px',
+    marginTop: '20px',
+    fontFamily: 'monospace'
   }
 };
