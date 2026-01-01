@@ -7,7 +7,7 @@ import EmergencyForm from './components/EmergencyForm';
 import TriageResults from './components/TriageResults';
 import AgentStatus from './components/AgentStatus';
 import HospitalList from './components/HospitalList';
-
+import AmbulanceMap from './components/AmbulanceMap';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,7 +18,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
 
 function Dashboard() {
   const [showSplash, setShowSplash] = useState(true);
@@ -44,28 +43,23 @@ function Dashboard() {
     setTriageData(data);
   };
 
-
   const handleEmergencyClick = () => {
     setShowLanding(false);
   };
 
-
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
-
 
   // Show splash screen for 2 seconds on first load
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
-
   // Show landing page until user clicks emergency
   if (showLanding) {
     return <LandingPage onEmergency={handleEmergencyClick} />;
   }
-
 
   // Show main emergency dashboard
   return (
@@ -78,14 +72,21 @@ function Dashboard() {
         ← Back to Home
       </button>
 
-
       <header style={styles.header}>
         <h1 style={styles.mainTitle}>⚡ Golden Hour Response Dashboard</h1>
         <p style={styles.subtitle}>AI-Powered Emergency Healthcare System</p>
       </header>
 
-
       <EmergencyForm onEmergencyCreated={handleEmergencyCreated} />
+      
+      {/* Show Ambulance Map when emergency is created */}
+      {emergencyId && triageData && (
+        <AmbulanceMap 
+          emergencyLocation={triageData.location}
+          hospitalLocation={{ lat: 28.7196, lng: 77.0369 }}
+          ambulanceStartLocation={{ lat: 28.7100, lng: 77.0700 }}
+        />
+      )}
       
       <TriageResults triageData={triageData} />
       
@@ -96,7 +97,6 @@ function Dashboard() {
   );
 }
 
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -105,7 +105,6 @@ function App() {
     </QueryClientProvider>
   );
 }
-
 
 const styles = {
   dashboard: {
@@ -152,6 +151,5 @@ const styles = {
     fontSize: '18px'
   }
 };
-
 
 export default App;
